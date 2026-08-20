@@ -26,11 +26,31 @@
         <span id="statusIndicator" class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></span>
         <span class="text-xs font-black tracking-widest uppercase text-slate-400">Charades Live</span>
       </div>
-      <div id="roomBadge" class="hidden text-xs font-mono bg-slate-800 text-indigo-400 px-2.5 py-1 rounded-md border border-slate-700 font-bold"></div>
+      
+      <div class="flex items-center space-x-1.5">
+        <div id="roomBadge" class="hidden text-xs font-mono bg-slate-800 text-indigo-400 px-2 py-1 rounded-md border border-slate-700 font-bold"></div>
+        <button id="hostKickBtn" onclick="toggleHostPanel()" class="hidden text-xs px-2 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-md font-bold">⚙️ Players</button>
+        <button id="globalLeaveBtn" onclick="leaveCurrentGame()" class="hidden text-xs px-2 py-1 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-md font-bold">Exit</button>
+      </div>
     </div>
 
     <!-- Error Toast -->
     <div id="errorToast" class="hidden text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 p-2.5 rounded-xl text-center font-semibold z-50"></div>
+
+    <!-- Host Player Management Modal -->
+    <div id="hostPanelModal" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-sm z-40 p-6 flex flex-col justify-between">
+      <div>
+        <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider">Host Controls</h3>
+          <button onclick="toggleHostPanel()" class="text-slate-400 font-bold px-2 py-1">✕</button>
+        </div>
+        <div class="mt-4 space-y-2">
+          <p class="text-xs text-slate-400 font-semibold">Active Players in Room:</p>
+          <div id="hostPlayerList" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+        </div>
+      </div>
+      <button onclick="toggleHostPanel()" class="w-full py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300">Close Panel</button>
+    </div>
 
     <!-- ==================== 1. MODE SELECTION & SETUP ==================== -->
     <div id="screenModeSelect" class="space-y-4 my-auto">
@@ -39,13 +59,12 @@
         <p class="text-xs text-slate-400 mt-1">Real life charades with real-time scoring!</p>
       </div>
 
-      <!-- Mode Selector Tabs -->
       <div class="grid grid-cols-2 gap-2 p-1 bg-slate-800/80 rounded-2xl border border-slate-700">
         <button id="tabOnlineBtn" onclick="switchModeTab('online')" class="py-2.5 text-xs font-bold rounded-xl bg-indigo-600 text-white shadow">Online Room</button>
         <button id="tabOfflineBtn" onclick="switchModeTab('offline')" class="py-2.5 text-xs font-bold rounded-xl text-slate-400 hover:text-white">Pass & Play</button>
       </div>
 
-      <!-- ONLINE MODE CONFIG -->
+      <!-- ONLINE CONFIG -->
       <div id="onlineConfigView" class="space-y-3">
         <div>
           <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Your Nickname</label>
@@ -324,13 +343,19 @@
       }
     };
 
-    // Client State
+    // Client Session Identification
+    let sessionId = sessionStorage.getItem('charades_session_id');
+    if (!sessionId) {
+      sessionId = 'sess_' + Math.random().toString(36).substring(2, 9);
+      sessionStorage.setItem('charades_session_id', sessionId);
+    }
+
     const socket = io();
-    let currentMode = 'online'; // 'online' | 'offline'
-    let currentRoomCode = null;
+    let currentMode = 'online';
+    let currentRoomCode = sessionStorage.getItem('charades_room_code') || null;
     let isHost = false;
     let localAttempts = 3;
-    let isMatchCompleteGlobal = false;
+    let allCurrentPlayers = [];
 
     // Offline Pass & Play Local Store
     let offlinePlayers = [];
@@ -359,6 +384,20 @@
       ];
       screens.forEach(s => document.getElementById(s).classList.add('hidden'));
       document.getElementById(id).classList.remove('hidden');
+
+      // Header controls visibility
+      if (id === 'screenModeSelect') {
+        document.getElementById('roomBadge').classList.add('hidden');
+        document.getElementById('globalLeaveBtn').classList.add('hidden');
+        document.getElementById('hostKickBtn').classList.add('hidden');
+      } else {
+        document.getElementById('globalLeaveBtn').classList.remove('hidden');
+        if (isHost && currentMode === 'online') {
+          document.getElementById('hostKickBtn').classList.remove('hidden');
+        } else {
+          document.getElementById('hostKickBtn').classList.add('hidden');
+        }
+      }
     }
 
     function showError(msg) {
@@ -390,6 +429,38 @@
       document.getElementById('attemptsCounter').innerText = count;
     }
 
+    function toggleHostPanel() {
+      const modal = document.getElementById('hostPanelModal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        renderHostPanelList();
+      }
+    }
+
+    function renderHostPanelList() {
+      const list = document.getElementById('hostPlayerList');
+      list.innerHTML = allCurrentPlayers.map(p => `
+        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+          <span>${p.name} ${p.isHost ? '👑' : ''}</span>
+          ${!p.isHost ? `<button onclick="kickPlayer('${p.sessionId}')" class="px-2 py-1 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded font-bold">Kick</button>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function kickPlayer(targetSessionId) {
+      if (currentRoomCode && isHost) {
+        socket.emit('kickPlayer', { roomCode: currentRoomCode, targetSessionId });
+      }
+    }
+
+    function leaveCurrentGame() {
+      if (currentMode === 'online' && currentRoomCode) {
+        socket.emit('leaveRoom', { roomCode: currentRoomCode });
+        sessionStorage.removeItem('charades_room_code');
+      }
+      window.location.reload();
+    }
+
     // ==================== ONLINE SOCKET EVENTS ====================
 
     function createOnlineRoom() {
@@ -398,7 +469,7 @@
       const difficulty = document.getElementById('difficultySelect').value;
       if (!name) return showError('Please enter a nickname.');
       AudioEngine.init();
-      socket.emit('createRoom', { playerName: name, category, difficulty });
+      socket.emit('createRoom', { playerName: name, category, difficulty, sessionId });
     }
 
     function joinOnlineRoom() {
@@ -407,7 +478,7 @@
       if (!name) return showError('Please enter a nickname.');
       if (!code) return showError('Please enter room code.');
       AudioEngine.init();
-      socket.emit('joinRoom', { roomCode: code, playerName: name });
+      socket.emit('joinRoom', { roomCode: code, playerName: name, sessionId });
     }
 
     function triggerOnlineRoundStart() {
@@ -426,14 +497,32 @@
 
     socket.on('errorMessage', (msg) => showError(msg));
 
+    socket.on('kicked', () => {
+      sessionStorage.removeItem('charades_room_code');
+      alert('You have been removed from the room by the host.');
+      window.location.reload();
+    });
+
+    socket.on('promotedToHost', () => {
+      isHost = true;
+      document.getElementById('hostControls').classList.remove('hidden');
+      document.getElementById('guestWaitMsg').classList.add('hidden');
+      document.getElementById('nextTurnBtnGroup').classList.remove('hidden');
+      document.getElementById('guestWaitNextRound').classList.add('hidden');
+      document.getElementById('hostKickBtn').classList.remove('hidden');
+      showError('👑 You are now the Room Host!');
+    });
+
     socket.on('roomCreated', ({ roomCode, player }) => {
       currentRoomCode = roomCode;
+      sessionStorage.setItem('charades_room_code', roomCode);
       isHost = player.isHost;
       setupOnlineLobby(roomCode);
     });
 
     socket.on('roomJoined', ({ roomCode, player }) => {
       currentRoomCode = roomCode;
+      sessionStorage.setItem('charades_room_code', roomCode);
       isHost = player.isHost;
       setupOnlineLobby(roomCode);
     });
@@ -446,27 +535,31 @@
       if (isHost) {
         document.getElementById('hostControls').classList.remove('hidden');
         document.getElementById('guestWaitMsg').classList.add('hidden');
+        document.getElementById('hostKickBtn').classList.remove('hidden');
       } else {
         document.getElementById('hostControls').classList.add('hidden');
         document.getElementById('guestWaitMsg').classList.remove('hidden');
+        document.getElementById('hostKickBtn').classList.add('hidden');
       }
       showScreen('screenOnlineLobby');
     }
 
     socket.on('playerListUpdate', (players) => {
+      allCurrentPlayers = players;
       document.getElementById('playerCount').innerText = players.length;
       const list = document.getElementById('lobbyPlayerList');
       list.innerHTML = players.map(p => `
         <div class="flex items-center justify-between p-2 rounded-lg bg-slate-800 text-slate-200">
-          <span class="font-medium">${p.name} ${p.isHost ? '👑' : ''}</span>
+          <span class="font-medium">${p.name} ${p.isHost ? '👑' : ''} ${!p.connected ? '(away)' : ''}</span>
           <span class="font-mono font-bold text-indigo-400">${p.score} pts</span>
         </div>
       `).join('');
+      renderHostPanelList();
     });
 
     socket.on('roundStarted', (data) => {
-      localAttempts = 3;
-      updateHearts(3);
+      localAttempts = data.attemptsLeft !== undefined ? data.attemptsLeft : 3;
+      updateHearts(localAttempts);
 
       if (data.role === 'actor') {
         document.getElementById('turnCounterActor').innerText = `Turn ${data.currentTurn}/${data.totalTurns}`;
@@ -477,8 +570,16 @@
         document.getElementById('guesserActorName').innerText = data.actorName;
         document.getElementById('guesserCategoryLabel').innerText = `${data.category} (${data.difficulty})`;
         document.getElementById('guesserHintSlots').innerText = data.hintPattern;
-        document.getElementById('guessBoxContainer').classList.remove('hidden');
-        document.getElementById('guessFeedback').classList.add('hidden');
+
+        if (data.hasGuessed) {
+          document.getElementById('guessBoxContainer').classList.add('hidden');
+          document.getElementById('guessFeedback').className = "text-center text-xs font-bold py-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+          document.getElementById('guessFeedback').innerText = "✓ You already guessed correctly!";
+          document.getElementById('guessFeedback').classList.remove('hidden');
+        } else {
+          document.getElementById('guessBoxContainer').classList.remove('hidden');
+          document.getElementById('guessFeedback').classList.add('hidden');
+        }
         showScreen('screenOnlineGuesser');
       }
     });
@@ -523,20 +624,18 @@
     });
 
     socket.on('roundEnded', ({ word, leaderboard, isMatchComplete }) => {
-      isMatchCompleteGlobal = isMatchComplete;
       document.getElementById('revealedWord').innerText = word;
       const list = document.getElementById('leaderboardList');
       
       const sorted = [...leaderboard].sort((a, b) => b.score - a.score);
       list.innerHTML = sorted.map((p, idx) => `
         <div class="flex items-center justify-between p-2 rounded-lg ${idx === 0 ? 'bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 font-bold' : 'bg-slate-900 text-slate-300'}">
-          <span>${idx + 1}. ${p.name}</span>
+          <span>${idx + 1}. ${p.name} ${p.isHost ? '👑' : ''}</span>
           <span class="font-mono font-bold">${p.score} pts</span>
         </div>
       `).join('');
 
       if (isMatchComplete) {
-        // Show Podium Directly after a brief pause
         setTimeout(() => {
           showPodium(leaderboard);
         }, 2200);
@@ -593,6 +692,7 @@
     }
 
     function returnHomeAction() {
+      sessionStorage.removeItem('charades_room_code');
       window.location.reload();
     }
 
@@ -665,7 +765,6 @@
       document.getElementById('passActingName').innerText = currentActor.name;
       document.getElementById('passWordActiveLabel').innerText = offlineCurrentWord;
 
-      // Populate list of guessers to reward
       const list = document.getElementById('passGuesserPickList');
       list.innerHTML = offlinePlayers
         .filter((_, idx) => idx !== offlineCurrentActorIndex)
@@ -712,7 +811,6 @@
     }
 
     function concludeOfflineRound() {
-      // Calculate scores
       const actor = offlinePlayers[offlineCurrentActorIndex];
       offlineGuessedList.forEach((gName, idx) => {
         const guesser = offlinePlayers.find(p => p.name === gName);
