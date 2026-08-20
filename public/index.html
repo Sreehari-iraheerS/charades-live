@@ -37,7 +37,7 @@
     <!-- Error Toast -->
     <div id="errorToast" class="hidden text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 p-2.5 rounded-xl text-center font-semibold z-50"></div>
 
-    <!-- Host Player Management Modal -->
+    <!-- Host Management Modal -->
     <div id="hostPanelModal" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-sm z-40 p-6 flex flex-col justify-between">
       <div>
         <div class="flex justify-between items-center pb-3 border-b border-slate-800">
@@ -45,11 +45,11 @@
           <button onclick="toggleHostPanel()" class="text-slate-400 font-bold px-2 py-1">✕</button>
         </div>
         <div class="mt-4 space-y-2">
-          <p class="text-xs text-slate-400 font-semibold">Active Players in Room:</p>
+          <p class="text-xs text-slate-400 font-semibold">Active Players:</p>
           <div id="hostPlayerList" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
         </div>
       </div>
-      <button onclick="toggleHostPanel()" class="w-full py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300">Close Panel</button>
+      <button onclick="toggleHostPanel()" class="w-full py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300">Close</button>
     </div>
 
     <!-- ==================== 1. MODE SELECTION & SETUP ==================== -->
@@ -305,7 +305,6 @@
   </div>
 
   <script>
-    // Audio Synthesizer (Web Audio API)
     const AudioEngine = {
       ctx: null,
       init() {
@@ -343,7 +342,6 @@
       }
     };
 
-    // Client Session Identification
     let sessionId = sessionStorage.getItem('charades_session_id');
     if (!sessionId) {
       sessionId = 'sess_' + Math.random().toString(36).substring(2, 9);
@@ -352,12 +350,11 @@
 
     const socket = io();
     let currentMode = 'online';
-    let currentRoomCode = sessionStorage.getItem('charades_room_code') || null;
+    let currentRoomCode = null;
     let isHost = false;
     let localAttempts = 3;
     let allCurrentPlayers = [];
 
-    // Offline Pass & Play Local Store
     let offlinePlayers = [];
     let offlineCurrentActorIndex = 0;
     let offlineTurnsCompleted = 0;
@@ -385,7 +382,6 @@
       screens.forEach(s => document.getElementById(s).classList.add('hidden'));
       document.getElementById(id).classList.remove('hidden');
 
-      // Header controls visibility
       if (id === 'screenModeSelect') {
         document.getElementById('roomBadge').classList.add('hidden');
         document.getElementById('globalLeaveBtn').classList.add('hidden');
@@ -456,12 +452,12 @@
     function leaveCurrentGame() {
       if (currentMode === 'online' && currentRoomCode) {
         socket.emit('leaveRoom', { roomCode: currentRoomCode });
-        sessionStorage.removeItem('charades_room_code');
       }
+      sessionStorage.removeItem('charades_session_id');
       window.location.reload();
     }
 
-    // ==================== ONLINE SOCKET EVENTS ====================
+    // ==================== ONLINE SOCKET ACTIONS ====================
 
     function createOnlineRoom() {
       const name = document.getElementById('playerName').value.trim();
@@ -498,7 +494,6 @@
     socket.on('errorMessage', (msg) => showError(msg));
 
     socket.on('kicked', () => {
-      sessionStorage.removeItem('charades_room_code');
       alert('You have been removed from the room by the host.');
       window.location.reload();
     });
@@ -515,14 +510,12 @@
 
     socket.on('roomCreated', ({ roomCode, player }) => {
       currentRoomCode = roomCode;
-      sessionStorage.setItem('charades_room_code', roomCode);
       isHost = player.isHost;
       setupOnlineLobby(roomCode);
     });
 
     socket.on('roomJoined', ({ roomCode, player }) => {
       currentRoomCode = roomCode;
-      sessionStorage.setItem('charades_room_code', roomCode);
       isHost = player.isHost;
       setupOnlineLobby(roomCode);
     });
@@ -692,7 +685,6 @@
     }
 
     function returnHomeAction() {
-      sessionStorage.removeItem('charades_room_code');
       window.location.reload();
     }
 
@@ -839,7 +831,6 @@
       showScreen('screenRoundEnd');
     }
 
-    // Input Enter Listener
     document.getElementById('guessInput').addEventListener('keyup', (e) => {
       if (e.key === 'Enter') submitOnlineGuess();
     });

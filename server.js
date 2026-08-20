@@ -9,7 +9,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Categorized Word Decks partitioned by Difficulty
+// Categorized Word Decks
 const WORD_DECKS = {
   malayalam: {
     easy: ["Drishyam", "Premam", "Lucifer", "Spadikam", "Kilukkam", "Aavesham", "CID Moosa", "Bangalore Days", "Godfather", "Kireedam", "In Harihar Nagar", "Punjabi House", "Meesha Madhavan"],
@@ -93,7 +93,6 @@ function calculateSimilarity(s1, s2) {
   return 1 - (dist / maxLen);
 }
 
-// Get non-repeating unique word
 function pickUniqueWord(room) {
   const categoryDeck = WORD_DECKS[room.category] || WORD_DECKS['malayalam'];
   const wordPool = categoryDeck[room.difficulty] || categoryDeck['medium'];
@@ -145,28 +144,28 @@ io.on('connection', (socket) => {
 
     socket.join(roomCode);
     socket.emit('roomCreated', { roomCode, player: host });
-    io.to(roomCode).emit('playerListUpdate', rooms[roomCode].players);
+    io.in(roomCode).emit('playerListUpdate', rooms[roomCode].players);
   });
 
-  // Join or Reconnect to Room
+  // Join Room
   socket.on('joinRoom', ({ roomCode, playerName, sessionId }) => {
     const code = (roomCode || '').toUpperCase().trim();
     const room = rooms[code];
 
-    if (!room) return socket.emit('errorMessage', 'Room not found.');
+    if (!room) return socket.emit('errorMessage', 'Room not found. Please check code.');
 
-    // Check if player is reconnecting with existing sessionId
-    let existingPlayer = room.players.find(p => p.sessionId === sessionId);
+    // Look for existing player in session
+    let existingPlayer = room.players.find(p => p.sessionId === sessionId || (p.name.toLowerCase() === playerName.toLowerCase() && !p.connected));
 
     if (existingPlayer) {
       existingPlayer.socketId = socket.id;
+      existingPlayer.name = playerName || existingPlayer.name;
       existingPlayer.connected = true;
       socket.join(code);
 
       socket.emit('roomJoined', { roomCode: code, player: existingPlayer });
-      io.to(code).emit('playerListUpdate', room.players);
+      io.in(code).emit('playerListUpdate', room.players);
 
-      // Restore in-game view if mid-round
       if (room.inRound) {
         const actor = room.players[room.currentActorIndex];
         const isActor = actor && actor.sessionId === existingPlayer.sessionId;
@@ -201,8 +200,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.inRound) return socket.emit('errorMessage', 'Match currently in progress. Please wait for next game.');
-    if (room.players.length >= 20) return socket.emit('errorMessage', 'Room is full (max 20 players).');
+    if (room.inRound) return socket.emit('errorMessage', 'Game in progress. Please wait.');
+    if (room.players.length >= 20) return socket.emit('errorMessage', 'Room is full.');
 
     const newPlayer = {
       sessionId: sessionId || socket.id,
@@ -217,11 +216,12 @@ io.on('connection', (socket) => {
 
     room.players.push(newPlayer);
     socket.join(code);
+
     socket.emit('roomJoined', { roomCode: code, player: newPlayer });
-    io.to(code).emit('playerListUpdate', room.players);
+    io.in(code).emit('playerListUpdate', room.players);
   });
 
-  // Start Round (Explicit Individual Role Delivery)
+  // Start Round
   socket.on('startRound', ({ roomCode }) => {
     const room = rooms[roomCode];
     if (!room || room.players.length === 0) return;
@@ -237,7 +237,6 @@ io.on('connection', (socket) => {
     room.correctGuessesCount = 0;
     room.timeLeft = 120;
 
-    // Reset attempt states
     room.players.forEach(p => {
       p.hasGuessed = false;
       p.attemptsLeft = 3;
@@ -246,7 +245,7 @@ io.on('connection', (socket) => {
     const actor = room.players[room.currentActorIndex];
     room.currentWord = pickUniqueWord(room);
 
-    // Target EACH player socket individually so roles never bleed or desync
+    // Send role to each player directly
     room.players.forEach(p => {
       if (p.socketId === actor.socketId) {
         io.to(p.socketId).emit('roundStarted', {
@@ -276,7 +275,7 @@ io.on('connection', (socket) => {
     clearInterval(room.timer);
     room.timer = setInterval(() => {
       room.timeLeft--;
-      io.to(roomCode).emit('timerTick', room.timeLeft);
+      io.in(roomCode).emit('timerTick', room.timeLeft);
 
       if (room.timeLeft <= 0) {
         clearInterval(room.timer);
@@ -285,7 +284,7 @@ io.on('connection', (socket) => {
     }, 1000);
   });
 
-  // Submit Guess with Fuzzy Match & Speed Bonus
+  // Submit Guess
   socket.on('submitGuess', ({ roomCode, guess }) => {
     const room = rooms[roomCode];
     if (!room || !room.inRound || room.timeLeft <= 0) return;
@@ -318,7 +317,7 @@ io.on('connection', (socket) => {
         attemptsLeft: player.attemptsLeft
       });
 
-      io.to(roomCode).emit('playerListUpdate', room.players);
+      io.in(roomCode).emit('playerListUpdate', room.players);
 
       const activeGuessers = room.players.filter(p => p.socketId !== actor.socketId && p.connected);
       if (room.correctGuessesCount >= activeGuessers.length) {
@@ -348,7 +347,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Host Kick Player
+  // Kick Player
   socket.on('kickPlayer', ({ roomCode, targetSessionId }) => {
     const room = rooms[roomCode];
     if (!room) return;
@@ -364,7 +363,6 @@ io.on('connection', (socket) => {
 
     room.players.splice(targetIndex, 1);
 
-    // If active actor was kicked, advance cleanly
     if (room.inRound && room.currentActorIndex === targetIndex) {
       clearInterval(room.timer);
       endRound(roomCode);
@@ -372,7 +370,7 @@ io.on('connection', (socket) => {
       if (targetIndex < room.currentActorIndex) {
         room.currentActorIndex = Math.max(0, room.currentActorIndex - 1);
       }
-      io.to(roomCode).emit('playerListUpdate', room.players);
+      io.in(roomCode).emit('playerListUpdate', room.players);
     }
   });
 
@@ -394,8 +392,8 @@ io.on('connection', (socket) => {
     room.usedWords.clear();
     room.players.forEach(p => { p.score = 0; p.hasGuessed = false; p.attemptsLeft = 3; });
     
-    io.to(roomCode).emit('playerListUpdate', room.players);
-    io.to(roomCode).emit('matchReset');
+    io.in(roomCode).emit('playerListUpdate', room.players);
+    io.in(roomCode).emit('matchReset');
   });
 
   socket.on('disconnect', () => {
@@ -405,7 +403,6 @@ io.on('connection', (socket) => {
       if (player) {
         player.connected = false;
         
-        // Immediate host migration if host disconnected
         if (player.isHost) {
           const nextActive = room.players.find(p => p.connected && p.sessionId !== player.sessionId);
           if (nextActive) {
@@ -415,7 +412,7 @@ io.on('connection', (socket) => {
           }
         }
         
-        io.to(code).emit('playerListUpdate', room.players);
+        io.in(code).emit('playerListUpdate', room.players);
         break;
       }
     }
@@ -430,7 +427,6 @@ io.on('connection', (socket) => {
       const removed = room.players.splice(index, 1)[0];
       sock.leave(code);
 
-      // Instant host migration
       if (removed.isHost && room.players.length > 0) {
         room.players[0].isHost = true;
         io.to(room.players[0].socketId).emit('promotedToHost');
@@ -440,7 +436,7 @@ io.on('connection', (socket) => {
         clearInterval(room.timer);
         delete rooms[code];
       } else {
-        io.to(code).emit('playerListUpdate', room.players);
+        io.in(code).emit('playerListUpdate', room.players);
         if (room.inRound && room.currentActorIndex === index) {
           clearInterval(room.timer);
           endRound(code);
@@ -465,16 +461,16 @@ io.on('connection', (socket) => {
       totalTurns: room.players.length
     };
 
-    io.to(roomCode).emit('roundEnded', room.lastRoundState);
+    io.in(roomCode).emit('roundEnded', room.lastRoundState);
     room.currentActorIndex = (room.currentActorIndex + 1) % room.players.length;
   }
 
   function endMatch(roomCode) {
     const room = rooms[roomCode];
     if (!room) return;
-    io.to(roomCode).emit('matchEnded', { leaderboard: room.players });
+    io.in(roomCode).emit('matchEnded', { leaderboard: room.players });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Game Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server online on port ${PORT}`));
