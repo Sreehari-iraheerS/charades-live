@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Charades Live</title>
+  <title>Charades Live - Pro Edition</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
@@ -16,112 +16,166 @@
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 flex items-center justify-center min-h-screen p-4">
+<body class="bg-slate-950 text-slate-100 flex items-center justify-center min-h-screen p-4 select-none">
 
-  <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col justify-between min-h-[640px]">
+  <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col justify-between min-h-[660px] relative overflow-hidden">
     
     <!-- Top Header -->
-    <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-800">
       <div class="flex items-center space-x-2">
-        <span class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></span>
-        <span class="text-xs font-bold tracking-widest uppercase text-slate-400">Charades Live</span>
+        <span id="statusIndicator" class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></span>
+        <span class="text-xs font-black tracking-widest uppercase text-slate-400">Charades Live</span>
       </div>
-      <div id="roomBadge" class="hidden text-xs font-mono bg-slate-800 text-indigo-400 px-2 py-1 rounded-md border border-slate-700 font-bold"></div>
+      <div id="roomBadge" class="hidden text-xs font-mono bg-slate-800 text-indigo-400 px-2.5 py-1 rounded-md border border-slate-700 font-bold"></div>
     </div>
 
-    <!-- Error Alert Toast -->
-    <div id="errorToast" class="hidden text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 p-2.5 rounded-xl text-center font-semibold"></div>
+    <!-- Error Toast -->
+    <div id="errorToast" class="hidden text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 p-2.5 rounded-xl text-center font-semibold z-50"></div>
 
-    <!-- 1. ENTRY SCREEN (Create / Join) -->
-    <div id="entryScreen" class="space-y-5 my-auto">
+    <!-- ==================== 1. MODE SELECTION & SETUP ==================== -->
+    <div id="screenModeSelect" class="space-y-4 my-auto">
       <div class="text-center">
-        <h1 class="text-2xl font-black tracking-tight text-white">Act & Guess</h1>
-        <p class="text-xs text-slate-400 mt-1">Act in real life, type & submit on phone!</p>
+        <h1 class="text-2xl font-black text-white tracking-tight">Act & Guess</h1>
+        <p class="text-xs text-slate-400 mt-1">Real life charades with real-time scoring!</p>
       </div>
 
-      <div class="space-y-3">
+      <!-- Mode Selector Tabs -->
+      <div class="grid grid-cols-2 gap-2 p-1 bg-slate-800/80 rounded-2xl border border-slate-700">
+        <button id="tabOnlineBtn" onclick="switchModeTab('online')" class="py-2.5 text-xs font-bold rounded-xl bg-indigo-600 text-white shadow">Online Room</button>
+        <button id="tabOfflineBtn" onclick="switchModeTab('offline')" class="py-2.5 text-xs font-bold rounded-xl text-slate-400 hover:text-white">Pass & Play</button>
+      </div>
+
+      <!-- ONLINE MODE CONFIG -->
+      <div id="onlineConfigView" class="space-y-3">
         <div>
-          <label class="text-xs font-medium text-slate-400">Your Nickname</label>
-          <input id="playerName" type="text" placeholder="Enter name" class="w-full mt-1 px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-white" />
+          <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Your Nickname</label>
+          <input id="playerName" type="text" placeholder="Enter name" class="w-full mt-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-white" />
         </div>
 
-        <div class="border-t border-slate-800 pt-3 space-y-2">
-          <label class="text-xs font-medium text-slate-400">Join Existing Game</label>
+        <div class="pt-2 border-t border-slate-800/80 space-y-2">
+          <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Join A Friend's Room</label>
           <div class="flex space-x-2">
-            <input id="joinCodeInput" type="text" maxlength="4" placeholder="ROOM CODE" class="w-2/3 px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm uppercase text-center font-mono font-bold focus:outline-none focus:border-indigo-500" />
-            <button onclick="joinRoom()" class="w-1/3 bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold rounded-xl text-xs transition">Join</button>
+            <input id="joinCodeInput" type="text" maxlength="4" placeholder="CODE" class="w-2/3 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm uppercase text-center font-mono font-bold focus:outline-none focus:border-indigo-500" />
+            <button onclick="joinOnlineRoom()" class="w-1/3 bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold rounded-xl text-xs">Join</button>
           </div>
         </div>
 
-        <div class="border-t border-slate-800 pt-3 space-y-2">
-          <label class="text-xs font-medium text-slate-400">Or Create a New Room</label>
-          <select id="categorySelect" class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
-            <option value="malayalam">Malayalam Movies</option>
-            <option value="english">English Movies</option>
-            <option value="animals">Animals</option>
-          </select>
-          <button onclick="createRoom()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition text-sm">
-            Create Room
+        <div class="pt-2 border-t border-slate-800/80 space-y-2">
+          <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Or Host New Room</label>
+          <div class="grid grid-cols-2 gap-2">
+            <select id="categorySelect" class="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-indigo-500">
+              <option value="malayalam">Malayalam Movies</option>
+              <option value="english">English Movies</option>
+              <option value="personalities">Famous People</option>
+              <option value="idioms">Idioms & Sayings</option>
+              <option value="actions">Actions & Tasks</option>
+              <option value="abstract">Tricky Abstract</option>
+              <option value="animals">Animals</option>
+            </select>
+            <select id="difficultySelect" class="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-indigo-500">
+              <option value="easy">Easy (1x)</option>
+              <option value="medium" selected>Medium (1.5x)</option>
+              <option value="hard">Hard (2x)</option>
+            </select>
+          </div>
+          <button onclick="createOnlineRoom()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition text-xs">
+            Create Online Room
           </button>
         </div>
       </div>
+
+      <!-- PASS & PLAY CONFIG -->
+      <div id="offlineConfigView" class="hidden space-y-3">
+        <div>
+          <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Add Players (2 - 20)</label>
+          <div class="flex space-x-2 mt-1">
+            <input id="offlinePlayerInput" type="text" placeholder="Friend's name" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-white" />
+            <button onclick="addOfflinePlayer()" class="px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold rounded-xl text-xs">+</button>
+          </div>
+          <div id="offlinePlayerChips" class="flex flex-wrap gap-1.5 mt-2 max-h-20 overflow-y-auto"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+          <select id="offlineCategorySelect" class="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs">
+            <option value="malayalam">Malayalam Movies</option>
+            <option value="english">English Movies</option>
+            <option value="personalities">Famous People</option>
+            <option value="idioms">Idioms</option>
+            <option value="actions">Actions</option>
+            <option value="abstract">Abstract</option>
+            <option value="animals">Animals</option>
+          </select>
+          <select id="offlineDifficultySelect" class="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+
+        <button onclick="startPassAndPlayGame()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition text-xs">
+          Start Pass & Play
+        </button>
+      </div>
     </div>
 
-    <!-- 2. LOBBY WAITING SCREEN -->
-    <div id="lobbyScreen" class="hidden space-y-5 my-auto">
+    <!-- ==================== 2. ONLINE LOBBY ==================== -->
+    <div id="screenOnlineLobby" class="hidden space-y-4 my-auto">
       <div class="text-center">
-        <p class="text-xs font-bold uppercase tracking-wider text-indigo-400">Share Room Code</p>
+        <p class="text-[11px] font-bold uppercase tracking-wider text-indigo-400">Room Code</p>
         <h2 id="lobbyRoomCode" class="text-4xl font-mono font-black text-white tracking-widest mt-1">----</h2>
       </div>
 
       <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-4">
-        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Connected Players (<span id="playerCount">0</span>/20)</p>
-        <div id="lobbyPlayerList" class="space-y-1.5 max-h-44 overflow-y-auto text-xs"></div>
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Players Joined (<span id="playerCount">0</span>/20)</p>
+        <div id="lobbyPlayerList" class="space-y-1.5 max-h-40 overflow-y-auto text-xs"></div>
       </div>
 
       <div id="hostControls" class="hidden">
-        <button onclick="startRound()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition">
-          Start Round (120s)
+        <button onclick="triggerOnlineRoundStart()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition text-sm">
+          Start Match (120s)
         </button>
       </div>
-      <p id="guestWaitMsg" class="hidden text-center text-xs text-slate-400 animate-pulse">Waiting for host to start...</p>
+      <p id="guestWaitMsg" class="hidden text-center text-xs text-slate-400 animate-pulse">Waiting for host to start turn...</p>
     </div>
 
-    <!-- 3. ACTOR SCREEN -->
-    <div id="actorScreen" class="hidden space-y-6 my-auto text-center">
-      <div class="inline-block px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold rounded-full uppercase tracking-wider">
-        🎭 You are the Actor!
+    <!-- ==================== 3. ONLINE ACTOR VIEW ==================== -->
+    <div id="screenOnlineActor" class="hidden space-y-5 my-auto text-center">
+      <div class="flex items-center justify-between">
+        <span class="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold rounded-full uppercase">
+          🎭 You are Acting!
+        </span>
+        <span id="turnCounterActor" class="text-xs font-mono text-slate-400 font-bold">Turn 1/3</span>
       </div>
 
-      <div class="bg-slate-800/90 border border-slate-700 p-5 rounded-2xl">
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider" id="actorCategoryLabel">Category</p>
+      <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider" id="actorCategoryLabel">Category</p>
         <h2 class="text-2xl font-black text-white mt-1" id="secretWordDisplay">---</h2>
       </div>
 
       <div class="space-y-1">
         <div class="text-4xl font-mono font-black text-indigo-400" id="timerActor">120</div>
-        <p class="text-xs text-slate-400">Seconds remaining</p>
+        <p class="text-[11px] text-slate-400">Seconds Remaining</p>
       </div>
 
       <div class="p-3 bg-slate-800/40 rounded-xl text-left border border-slate-800 text-xs text-slate-400 space-y-1">
-        <p>• Do not make sounds or mouth words.</p>
+        <p>• Act physically without speaking.</p>
         <p>• Guessers have <strong>max 3 attempts</strong> each.</p>
-        <p>• You gain <strong>+20 pts</strong> for each friend who guesses right.</p>
+        <p>• You gain points for every player who gets it right!</p>
       </div>
     </div>
 
-    <!-- 4. GUESSER SCREEN -->
-    <div id="guesserScreen" class="hidden space-y-5 my-auto">
+    <!-- ==================== 4. ONLINE GUESSER VIEW ==================== -->
+    <div id="screenOnlineGuesser" class="hidden space-y-5 my-auto">
       <div class="text-center">
         <div class="flex items-center justify-between px-1">
           <span class="inline-block px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-[11px] font-bold rounded-full uppercase">
-            👀 Guesser
+            👀 Actor: <span id="guesserActorName" class="text-white">Player</span>
           </span>
           <div id="heartsDisplay" class="flex space-x-1 text-base tracking-widest">
             <span>❤️</span><span>❤️</span><span>❤️</span>
           </div>
         </div>
-        <div class="text-3xl font-mono font-black text-indigo-400 mt-2" id="timerGuesser">120</div>
+        <div class="text-4xl font-mono font-black text-indigo-400 mt-2" id="timerGuesser">120</div>
       </div>
 
       <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl text-center">
@@ -130,8 +184,8 @@
       </div>
 
       <div id="guessBoxContainer" class="space-y-2">
-        <input id="guessInput" type="text" placeholder="Type answer here..." class="w-full px-3 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-white" />
-        <button onclick="submitGuess()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition text-sm">
+        <input id="guessInput" type="text" placeholder="Type guess..." class="w-full px-3 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-white" />
+        <button onclick="submitOnlineGuess()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition text-sm">
           Submit Guess (<span id="attemptsCounter">3</span> left)
         </button>
       </div>
@@ -139,45 +193,172 @@
       <div id="guessFeedback" class="hidden text-center text-xs font-bold py-2.5 rounded-xl"></div>
     </div>
 
-    <!-- 5. ROUND OVER SCREEN -->
-    <div id="roundEndScreen" class="hidden space-y-4 my-auto">
+    <!-- ==================== 5. PASS & PLAY INTERMEDIATE ==================== -->
+    <div id="screenPassHandover" class="hidden space-y-5 my-auto text-center">
+      <div class="text-4xl">📱</div>
+      <div>
+        <p class="text-xs uppercase font-bold text-slate-400 tracking-wider">Pass the phone to</p>
+        <h2 id="passCurrentPlayerName" class="text-2xl font-black text-indigo-400 mt-1">Player</h2>
+      </div>
+
+      <div id="passSecretCard" class="hidden bg-slate-800 border border-slate-700 p-4 rounded-2xl">
+        <p class="text-[11px] text-slate-400 uppercase font-bold" id="passCategoryBadge">Malayalam</p>
+        <h3 id="passSecretWordText" class="text-xl font-extrabold text-white mt-1">Secret Word</h3>
+      </div>
+
+      <button id="passRevealBtn" onclick="revealPassWord()" class="w-full py-3 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white font-bold rounded-xl text-xs">
+        Tap to Reveal Secret Word (Keep Private)
+      </button>
+
+      <button id="passStartActBtn" onclick="startPassRoundAct()" class="hidden w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg">
+        Start Acting (120s)
+      </button>
+    </div>
+
+    <!-- ==================== 6. PASS & PLAY ACTIVE ROUND ==================== -->
+    <div id="screenPassActive" class="hidden space-y-5 my-auto text-center">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-amber-400 uppercase">Acting: <span id="passActingName"></span></span>
+        <span class="text-4xl font-mono font-black text-indigo-400" id="timerPass">120</span>
+      </div>
+
+      <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-2xl">
+        <p class="text-[10px] text-slate-400 uppercase">Word</p>
+        <p class="text-base font-bold text-slate-200" id="passWordActiveLabel">---</p>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-slate-400">Select who guessed correctly:</p>
+        <div id="passGuesserPickList" class="space-y-1 max-h-32 overflow-y-auto"></div>
+      </div>
+
+      <button onclick="endPassRoundManually()" class="w-full py-2.5 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs font-bold rounded-xl text-slate-300">
+        End Turn Early
+      </button>
+    </div>
+
+    <!-- ==================== 7. ROUND OVER REVEAL ==================== -->
+    <div id="screenRoundEnd" class="hidden space-y-4 my-auto">
       <div class="text-center">
-        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Round Over</p>
-        <h2 class="text-lg font-bold text-white mt-1">Answer: <span id="revealedWord" class="text-indigo-400 font-extrabold"></span></h2>
+        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Turn Over</p>
+        <h2 class="text-base font-bold text-white mt-0.5">Answer was: <span id="revealedWord" class="text-indigo-400 font-extrabold"></span></h2>
       </div>
 
       <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-3">
-        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">Current Leaderboard</p>
-        <div id="leaderboardList" class="space-y-1.5 text-xs max-h-48 overflow-y-auto"></div>
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">Leaderboard</p>
+        <div id="leaderboardList" class="space-y-1.5 text-xs max-h-40 overflow-y-auto"></div>
       </div>
 
-      <div id="nextTurnContainer" class="hidden">
-        <button onclick="startRound()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-sm">
+      <div id="nextTurnBtnGroup">
+        <button id="nextTurnBtn" onclick="nextRoundAction()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-sm">
           Next Turn
         </button>
       </div>
-      <p id="guestWaitNextRound" class="hidden text-center text-xs text-slate-400 animate-pulse">Waiting for host...</p>
+      <p id="guestWaitNextRound" class="hidden text-center text-xs text-slate-400 animate-pulse">Waiting for host to start next turn...</p>
     </div>
 
-    <!-- Footer -->
-    <div class="pt-4 border-t border-slate-800 text-center text-[10px] text-slate-400">
-      1st: 100 pts • 2nd: 80 pts • 3rd: 60 pts • 3 chances max
+    <!-- ==================== 8. MATCH OVER PODIUM ==================== -->
+    <div id="screenPodium" class="hidden space-y-5 my-auto text-center">
+      <div class="text-4xl">👑</div>
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wider text-amber-400">Match Winner</p>
+        <h2 id="winnerName" class="text-2xl font-black text-white mt-1">Winner</h2>
+        <p id="winnerScore" class="text-xs font-mono text-indigo-400 font-bold mt-0.5">0 pts</p>
+      </div>
+
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-3 text-left">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">Final Standings</p>
+        <div id="podiumLeaderboard" class="space-y-1 text-xs"></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="restartMatchAction()" class="py-3 bg-emerald-600 hover:bg-emerald-500 font-bold rounded-xl text-xs text-white">Play Again</button>
+        <button onclick="returnHomeAction()" class="py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold rounded-xl text-xs text-slate-300">Home Menu</button>
+      </div>
+    </div>
+
+    <!-- Global Footer -->
+    <div class="pt-3 border-t border-slate-800 text-center text-[10px] text-slate-400 flex justify-between px-2">
+      <span>1st: 100 • 2nd: 80 • 3rd: 60</span>
+      <span>Max 3 Chances</span>
     </div>
 
   </div>
 
   <script>
+    // Audio Synthesizer (Web Audio API)
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      },
+      playTick() {
+        try {
+          this.init();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+          gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.08);
+        } catch(e) {}
+      },
+      playBuzzer() {
+        try {
+          this.init();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+          gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.4);
+        } catch(e) {}
+      }
+    };
+
+    // Client State
     const socket = io();
+    let currentMode = 'online'; // 'online' | 'offline'
     let currentRoomCode = null;
     let isHost = false;
-    let localAttemptsLeft = 3;
+    let localAttempts = 3;
+    let isMatchCompleteGlobal = false;
 
-    // Helpers
-    function showScreen(screenId) {
-      ['entryScreen', 'lobbyScreen', 'actorScreen', 'guesserScreen', 'roundEndScreen'].forEach(id => {
-        document.getElementById(id).classList.add('hidden');
-      });
-      document.getElementById(screenId).classList.remove('hidden');
+    // Offline Pass & Play Local Store
+    let offlinePlayers = [];
+    let offlineCurrentActorIndex = 0;
+    let offlineTurnsCompleted = 0;
+    let offlineCurrentWord = '';
+    let offlineTimer = null;
+    let offlineTimeLeft = 120;
+    let offlineGuessedList = [];
+
+    const OFFLINE_WORD_BANK = {
+      malayalam: ["Manichitrathazhu", "Lucifer", "Drishyam", "Premam", "Kumbalangi Nights", "Aavesham", "Spadikam", "Kilukkam", "Bangalore Days"],
+      english: ["Inception", "Interstellar", "Titanic", "Avatar", "Gladiator", "The Dark Knight", "Jurassic Park"],
+      personalities: ["Mohanlal", "Mammootty", "Dulquer Salmaan", "Fahadh Faasil", "Messi", "Charlie Chaplin"],
+      idioms: ["Piece of cake", "Break a leg", "Time is money", "Spill the beans"],
+      actions: ["Brushing teeth", "Cooking dinner", "Playing badminton", "Taking a selfie"],
+      abstract: ["Happiness", "Confusion", "Nostalgia", "Existential crisis"],
+      animals: ["Kangaroo", "Chameleon", "Gorilla", "Penguin", "Elephant", "Platypus"]
+    };
+
+    function showScreen(id) {
+      const screens = [
+        'screenModeSelect', 'screenOnlineLobby', 'screenOnlineActor', 
+        'screenOnlineGuesser', 'screenPassHandover', 'screenPassActive', 
+        'screenRoundEnd', 'screenPodium'
+      ];
+      screens.forEach(s => document.getElementById(s).classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
     }
 
     function showError(msg) {
@@ -187,61 +368,77 @@
       setTimeout(() => el.classList.add('hidden'), 3500);
     }
 
+    function switchModeTab(mode) {
+      currentMode = mode;
+      if (mode === 'online') {
+        document.getElementById('tabOnlineBtn').className = 'py-2.5 text-xs font-bold rounded-xl bg-indigo-600 text-white shadow';
+        document.getElementById('tabOfflineBtn').className = 'py-2.5 text-xs font-bold rounded-xl text-slate-400 hover:text-white';
+        document.getElementById('onlineConfigView').classList.remove('hidden');
+        document.getElementById('offlineConfigView').classList.add('hidden');
+      } else {
+        document.getElementById('tabOfflineBtn').className = 'py-2.5 text-xs font-bold rounded-xl bg-indigo-600 text-white shadow';
+        document.getElementById('tabOnlineBtn').className = 'py-2.5 text-xs font-bold rounded-xl text-slate-400 hover:text-white';
+        document.getElementById('offlineConfigView').classList.remove('hidden');
+        document.getElementById('onlineConfigView').classList.add('hidden');
+      }
+    }
+
     function updateHearts(count) {
       let hearts = '';
-      for (let i = 0; i < 3; i++) {
-        hearts += i < count ? '❤️' : '🖤';
-      }
+      for (let i = 0; i < 3; i++) hearts += i < count ? '❤️' : '🖤';
       document.getElementById('heartsDisplay').innerHTML = hearts;
       document.getElementById('attemptsCounter').innerText = count;
     }
 
-    // Actions
-    function createRoom() {
+    // ==================== ONLINE SOCKET EVENTS ====================
+
+    function createOnlineRoom() {
       const name = document.getElementById('playerName').value.trim();
       const category = document.getElementById('categorySelect').value;
-      if (!name) return showError('Please enter your nickname');
-      socket.emit('createRoom', { playerName: name, category });
+      const difficulty = document.getElementById('difficultySelect').value;
+      if (!name) return showError('Please enter a nickname.');
+      AudioEngine.init();
+      socket.emit('createRoom', { playerName: name, category, difficulty });
     }
 
-    function joinRoom() {
+    function joinOnlineRoom() {
       const name = document.getElementById('playerName').value.trim();
       const code = document.getElementById('joinCodeInput').value.trim();
-      if (!name) return showError('Please enter your nickname');
-      if (!code) return showError('Please enter room code');
+      if (!name) return showError('Please enter a nickname.');
+      if (!code) return showError('Please enter room code.');
+      AudioEngine.init();
       socket.emit('joinRoom', { roomCode: code, playerName: name });
     }
 
-    function startRound() {
+    function triggerOnlineRoundStart() {
       if (currentRoomCode && isHost) {
         socket.emit('startRound', { roomCode: currentRoomCode });
       }
     }
 
-    function submitGuess() {
+    function submitOnlineGuess() {
       const input = document.getElementById('guessInput');
       const guess = input.value.trim();
-      if (!guess || localAttemptsLeft <= 0) return;
+      if (!guess || localAttempts <= 0) return;
       socket.emit('submitGuess', { roomCode: currentRoomCode, guess });
       input.value = '';
     }
 
-    // Socket Event Handlers
     socket.on('errorMessage', (msg) => showError(msg));
 
     socket.on('roomCreated', ({ roomCode, player }) => {
       currentRoomCode = roomCode;
       isHost = player.isHost;
-      setupLobbyView(roomCode);
+      setupOnlineLobby(roomCode);
     });
 
     socket.on('roomJoined', ({ roomCode, player }) => {
       currentRoomCode = roomCode;
       isHost = player.isHost;
-      setupLobbyView(roomCode);
+      setupOnlineLobby(roomCode);
     });
 
-    function setupLobbyView(code) {
+    function setupOnlineLobby(code) {
       document.getElementById('roomBadge').innerText = `ROOM: ${code}`;
       document.getElementById('roomBadge').classList.remove('hidden');
       document.getElementById('lobbyRoomCode').innerText = code;
@@ -253,7 +450,7 @@
         document.getElementById('hostControls').classList.add('hidden');
         document.getElementById('guestWaitMsg').classList.remove('hidden');
       }
-      showScreen('lobbyScreen');
+      showScreen('screenOnlineLobby');
     }
 
     socket.on('playerListUpdate', (players) => {
@@ -268,41 +465,53 @@
     });
 
     socket.on('roundStarted', (data) => {
-      localAttemptsLeft = 3;
+      localAttempts = 3;
       updateHearts(3);
 
       if (data.role === 'actor') {
-        document.getElementById('actorCategoryLabel').innerText = data.category.toUpperCase();
+        document.getElementById('turnCounterActor').innerText = `Turn ${data.currentTurn}/${data.totalTurns}`;
+        document.getElementById('actorCategoryLabel').innerText = `${data.category} (${data.difficulty})`;
         document.getElementById('secretWordDisplay').innerText = data.word;
-        showScreen('actorScreen');
+        showScreen('screenOnlineActor');
       } else {
-        document.getElementById('guesserCategoryLabel').innerText = data.category.toUpperCase();
+        document.getElementById('guesserActorName').innerText = data.actorName;
+        document.getElementById('guesserCategoryLabel').innerText = `${data.category} (${data.difficulty})`;
         document.getElementById('guesserHintSlots').innerText = data.hintPattern;
         document.getElementById('guessBoxContainer').classList.remove('hidden');
         document.getElementById('guessFeedback').classList.add('hidden');
-        showScreen('guesserScreen');
+        showScreen('screenOnlineGuesser');
       }
     });
 
     socket.on('timerTick', (timeLeft) => {
       document.getElementById('timerActor').innerText = timeLeft;
       document.getElementById('timerGuesser').innerText = timeLeft;
+
+      if (timeLeft <= 10 && timeLeft > 0) {
+        AudioEngine.playTick();
+      } else if (timeLeft === 0) {
+        AudioEngine.playBuzzer();
+      }
     });
 
-    socket.on('guessResult', ({ correct, points, attemptsLeft }) => {
-      localAttemptsLeft = attemptsLeft;
+    socket.on('guessResult', ({ status, points, attemptsLeft }) => {
+      localAttempts = attemptsLeft;
       updateHearts(attemptsLeft);
       const feedback = document.getElementById('guessFeedback');
 
-      if (correct) {
+      if (status === 'correct') {
         feedback.className = "text-center text-xs font-bold py-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
-        feedback.innerText = `🎉 Correct! You scored +${points} points!`;
+        feedback.innerText = `🎉 Correct! Scored +${points} pts!`;
         feedback.classList.remove('hidden');
         document.getElementById('guessBoxContainer').classList.add('hidden');
+      } else if (status === 'close') {
+        feedback.className = "text-center text-xs font-bold py-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30";
+        feedback.innerText = "🔥 Very close! Check spelling!";
+        feedback.classList.remove('hidden');
       } else {
         if (attemptsLeft > 0) {
           feedback.className = "text-center text-xs font-bold py-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shake";
-          feedback.innerText = `❌ Incorrect! (${attemptsLeft} chance${attemptsLeft > 1 ? 's' : ''} left)`;
+          feedback.innerText = `❌ Wrong guess (${attemptsLeft} left)`;
           feedback.classList.remove('hidden');
         } else {
           feedback.className = "text-center text-xs font-bold py-2.5 rounded-xl bg-slate-800 text-slate-400 border border-rose-500/40";
@@ -313,32 +522,228 @@
       }
     });
 
-    socket.on('roundEnded', ({ word, leaderboard }) => {
+    socket.on('roundEnded', ({ word, leaderboard, isMatchComplete }) => {
+      isMatchCompleteGlobal = isMatchComplete;
       document.getElementById('revealedWord').innerText = word;
       const list = document.getElementById('leaderboardList');
       
       const sorted = [...leaderboard].sort((a, b) => b.score - a.score);
       list.innerHTML = sorted.map((p, idx) => `
         <div class="flex items-center justify-between p-2 rounded-lg ${idx === 0 ? 'bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 font-bold' : 'bg-slate-900 text-slate-300'}">
-          <span>${idx + 1}. ${p.name} ${p.isHost ? '👑' : ''}</span>
+          <span>${idx + 1}. ${p.name}</span>
           <span class="font-mono font-bold">${p.score} pts</span>
         </div>
       `).join('');
 
-      if (isHost) {
-        document.getElementById('nextTurnContainer').classList.remove('hidden');
-        document.getElementById('guestWaitNextRound').classList.add('hidden');
+      if (isMatchComplete) {
+        // Show Podium Directly after a brief pause
+        setTimeout(() => {
+          showPodium(leaderboard);
+        }, 2200);
       } else {
-        document.getElementById('nextTurnContainer').classList.add('hidden');
-        document.getElementById('guestWaitNextRound').classList.remove('hidden');
+        if (isHost) {
+          document.getElementById('nextTurnBtnGroup').classList.remove('hidden');
+          document.getElementById('guestWaitNextRound').classList.add('hidden');
+        } else {
+          document.getElementById('nextTurnBtnGroup').classList.add('hidden');
+          document.getElementById('guestWaitNextRound').classList.remove('hidden');
+        }
+        showScreen('screenRoundEnd');
       }
-
-      showScreen('roundEndScreen');
     });
 
-    // Enter key triggers submission
+    socket.on('matchReset', () => {
+      showScreen('screenOnlineLobby');
+    });
+
+    function nextRoundAction() {
+      if (currentMode === 'online') {
+        triggerOnlineRoundStart();
+      } else {
+        advancePassRound();
+      }
+    }
+
+    function showPodium(players) {
+      const sorted = [...players].sort((a, b) => b.score - a.score);
+      const winner = sorted[0] || { name: 'Player', score: 0 };
+      document.getElementById('winnerName').innerText = winner.name;
+      document.getElementById('winnerScore').innerText = `${winner.score} pts`;
+
+      const list = document.getElementById('podiumLeaderboard');
+      list.innerHTML = sorted.map((p, idx) => `
+        <div class="flex items-center justify-between p-1.5 rounded-lg ${idx === 0 ? 'text-amber-400 font-bold' : 'text-slate-300'}">
+          <span>${idx + 1}. ${p.name}</span>
+          <span class="font-mono font-bold">${p.score} pts</span>
+        </div>
+      `).join('');
+
+      showScreen('screenPodium');
+    }
+
+    function restartMatchAction() {
+      if (currentMode === 'online' && isHost) {
+        socket.emit('restartMatch', { roomCode: currentRoomCode });
+      } else if (currentMode === 'offline') {
+        offlineCurrentActorIndex = 0;
+        offlineTurnsCompleted = 0;
+        offlinePlayers.forEach(p => p.score = 0);
+        advancePassRound();
+      }
+    }
+
+    function returnHomeAction() {
+      window.location.reload();
+    }
+
+    // ==================== PASS & PLAY (OFFLINE MODE) ====================
+
+    function addOfflinePlayer() {
+      const input = document.getElementById('offlinePlayerInput');
+      const name = input.value.trim();
+      if (!name) return;
+      if (offlinePlayers.length >= 20) return showError('Maximum 20 players allowed.');
+
+      offlinePlayers.push({ name, score: 0 });
+      input.value = '';
+      renderOfflineChips();
+    }
+
+    function renderOfflineChips() {
+      const container = document.getElementById('offlinePlayerChips');
+      container.innerHTML = offlinePlayers.map((p, i) => `
+        <span class="inline-flex items-center px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200">
+          ${p.name}
+          <button onclick="removeOfflinePlayer(${i})" class="ml-1.5 text-slate-400 hover:text-rose-400 font-bold">×</button>
+        </span>
+      `).join('');
+    }
+
+    function removeOfflinePlayer(index) {
+      offlinePlayers.splice(index, 1);
+      renderOfflineChips();
+    }
+
+    function startPassAndPlayGame() {
+      if (offlinePlayers.length < 2) return showError('Please add at least 2 players.');
+      AudioEngine.init();
+      offlineCurrentActorIndex = 0;
+      offlineTurnsCompleted = 0;
+      advancePassRound();
+    }
+
+    function advancePassRound() {
+      if (offlineTurnsCompleted >= offlinePlayers.length) {
+        return showPodium(offlinePlayers);
+      }
+
+      const category = document.getElementById('offlineCategorySelect').value;
+      const list = OFFLINE_WORD_BANK[category] || OFFLINE_WORD_BANK['malayalam'];
+      offlineCurrentWord = list[Math.floor(Math.random() * list.length)];
+      offlineGuessedList = [];
+
+      const currentActor = offlinePlayers[offlineCurrentActorIndex];
+      document.getElementById('passCurrentPlayerName').innerText = currentActor.name;
+      document.getElementById('passCategoryBadge').innerText = category.toUpperCase();
+      document.getElementById('passSecretWordText').innerText = offlineCurrentWord;
+
+      document.getElementById('passSecretCard').classList.add('hidden');
+      document.getElementById('passStartActBtn').classList.add('hidden');
+      document.getElementById('passRevealBtn').classList.remove('hidden');
+
+      showScreen('screenPassHandover');
+    }
+
+    function revealPassWord() {
+      document.getElementById('passSecretCard').classList.remove('hidden');
+      document.getElementById('passRevealBtn').classList.add('hidden');
+      document.getElementById('passStartActBtn').classList.remove('hidden');
+    }
+
+    function startPassRoundAct() {
+      const currentActor = offlinePlayers[offlineCurrentActorIndex];
+      document.getElementById('passActingName').innerText = currentActor.name;
+      document.getElementById('passWordActiveLabel').innerText = offlineCurrentWord;
+
+      // Populate list of guessers to reward
+      const list = document.getElementById('passGuesserPickList');
+      list.innerHTML = offlinePlayers
+        .filter((_, idx) => idx !== offlineCurrentActorIndex)
+        .map(p => `
+          <button onclick="toggleOfflineGuesser('${p.name}', this)" class="w-full text-left p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 flex justify-between items-center">
+            <span>${p.name}</span>
+            <span class="text-slate-600 font-bold">Tap if guessed</span>
+          </button>
+        `).join('');
+
+      offlineTimeLeft = 120;
+      document.getElementById('timerPass').innerText = offlineTimeLeft;
+      showScreen('screenPassActive');
+
+      clearInterval(offlineTimer);
+      offlineTimer = setInterval(() => {
+        offlineTimeLeft--;
+        document.getElementById('timerPass').innerText = offlineTimeLeft;
+
+        if (offlineTimeLeft <= 10 && offlineTimeLeft > 0) AudioEngine.playTick();
+        if (offlineTimeLeft <= 0) {
+          clearInterval(offlineTimer);
+          AudioEngine.playBuzzer();
+          concludeOfflineRound();
+        }
+      }, 1000);
+    }
+
+    function toggleOfflineGuesser(name, btn) {
+      if (offlineGuessedList.includes(name)) {
+        offlineGuessedList = offlineGuessedList.filter(n => n !== name);
+        btn.className = "w-full text-left p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 flex justify-between items-center";
+        btn.querySelector('span:last-child').innerText = 'Tap if guessed';
+      } else {
+        offlineGuessedList.push(name);
+        btn.className = "w-full text-left p-2 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-xs text-emerald-300 flex justify-between items-center font-bold";
+        btn.querySelector('span:last-child').innerText = '✓ Guessed';
+      }
+    }
+
+    function endPassRoundManually() {
+      clearInterval(offlineTimer);
+      concludeOfflineRound();
+    }
+
+    function concludeOfflineRound() {
+      // Calculate scores
+      const actor = offlinePlayers[offlineCurrentActorIndex];
+      offlineGuessedList.forEach((gName, idx) => {
+        const guesser = offlinePlayers.find(p => p.name === gName);
+        if (guesser) {
+          const tier = [100, 80, 60];
+          guesser.score += tier[idx] || 40;
+          actor.score += 20;
+        }
+      });
+
+      offlineTurnsCompleted++;
+      offlineCurrentActorIndex = (offlineCurrentActorIndex + 1) % offlinePlayers.length;
+
+      document.getElementById('revealedWord').innerText = offlineCurrentWord;
+      const list = document.getElementById('leaderboardList');
+      const sorted = [...offlinePlayers].sort((a, b) => b.score - a.score);
+      list.innerHTML = sorted.map((p, idx) => `
+        <div class="flex items-center justify-between p-2 rounded-lg ${idx === 0 ? 'bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 font-bold' : 'bg-slate-900 text-slate-300'}">
+          <span>${idx + 1}. ${p.name}</span>
+          <span class="font-mono font-bold">${p.score} pts</span>
+        </div>
+      `).join('');
+
+      document.getElementById('nextTurnBtnGroup').classList.remove('hidden');
+      document.getElementById('guestWaitNextRound').classList.add('hidden');
+      showScreen('screenRoundEnd');
+    }
+
+    // Input Enter Listener
     document.getElementById('guessInput').addEventListener('keyup', (e) => {
-      if (e.key === 'Enter') submitGuess();
+      if (e.key === 'Enter') submitOnlineGuess();
     });
   </script>
 </body>
